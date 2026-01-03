@@ -26,7 +26,7 @@ class ReminderReceiver : BroadcastReceiver() {
 
         val generativeModel = GenerativeModel(
             modelName = "gemini-2.5-flash",
-            apiKey = "AIzaSyDr75PDGn_TnwSA4iUdrAUtHyAtl_zQXOU"
+            apiKey = "xxxxxxxxxxxxxxxxxxxxx"
         )
 
         CoroutineScope(Dispatchers.IO).launch {
