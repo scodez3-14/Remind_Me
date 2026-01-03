@@ -1,6 +1,7 @@
 package com.example.whynot
 
 import android.Manifest
+import android.app.Activity
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,24 +15,63 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberTimePickerState
-import java.util.Calendar
-
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import java.util.Calendar
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Card
+import androidx.compose.ui.unit.dp
+
 
 data class ReminderItem(
     val id: Int,
@@ -103,93 +143,151 @@ fun scheduleNotification(context: Context, time: Long, message: String, id: Int)
 
     alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, time, pendingIntent)
 }
+
+
+
+fun saveReminders(context: Context, list: List<ReminderItem>) {
+    val sharedPreferences = context.getSharedPreferences("reminder_prefs", Context.MODE_PRIVATE)
+    val editor = sharedPreferences.edit()
+    val json = Gson().toJson(list) // Converts list to String
+    editor.putString("reminders", json)
+    editor.apply()
+}
+
+fun loadReminders(context: Context): MutableList<ReminderItem> {
+    val sharedPreferences = context.getSharedPreferences("reminder_prefs", Context.MODE_PRIVATE)
+    val json = sharedPreferences.getString("reminders", null)
+    val type = object : TypeToken<MutableList<ReminderItem>>() {}.type
+    return if (json == null) mutableListOf() else Gson().fromJson(json, type)
+}
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReminderScreen(context: Context) {
-    var reminderText by remember { mutableStateOf("") }
-    var showTimePicker by remember { mutableStateOf(false) }
-    val timePickerState = rememberTimePickerState()
+    val reminderList = remember { mutableStateListOf<ReminderItem>().apply { addAll(loadReminders(context)) } }
+    var showAddDialog by remember { mutableStateOf(false) }
 
-    // This list holds all your reminders in the phone's temporary memory
-    val reminderList = remember { mutableStateListOf<ReminderItem>() }
+    // Temp states for inputs
+    var taskText by remember { mutableStateOf("") }
+    val calendar = remember { Calendar.getInstance() }
+    var selectedDate by remember { mutableStateOf("${calendar.get(Calendar.YEAR)}-${calendar.get(Calendar.MONTH)+1}-${calendar.get(Calendar.DAY_OF_MONTH)}") }
+    var selectedTime by remember { mutableStateOf(String.format("%02d:%02d", calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE))) }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp)
-    ) {
-        Text(text = "My Reminders", style = MaterialTheme.typography.headlineMedium)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        TextField(
-            value = reminderText,
-            onValueChange = { reminderText = it },
-            label = { Text("What's the plan?") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Button(
-            onClick = { showTimePicker = true },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Set Time & Add +")
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showAddDialog = true }) {
+                Icon(Icons.Default.Add, contentDescription = "Add Task")
+            }
         }
+    ) { paddingValues ->
+        Column(modifier = Modifier
+            .fillMaxSize()
+            .padding(paddingValues)
+            .padding(16.dp)
+        ) {
+            Text("My Tasks", style = MaterialTheme.typography.headlineMedium)
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // This displays the list of reminders
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(reminderList) { item ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(reminderList) { item ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     ) {
-                        Column {
-                            Text(text = item.message, style = MaterialTheme.typography.bodyLarge)
-                            Text(text = "At: ${item.time}", color = Color.Gray)
-                        }
-
-                        // Delete Button
-                        IconButton(onClick = { reminderList.remove(item) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red)
+                        Row(
+                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(item.message, style = MaterialTheme.typography.bodyLarge)
+                                Text("On: ${item.time}, ${item.id}", color = Color.Gray) // you can store date too
+                            }
+                            IconButton(onClick = {
+                                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                                val intent = Intent(context, ReminderReceiver::class.java)
+                                val pendingIntent = PendingIntent.getBroadcast(
+                                    context,
+                                    item.id,
+                                    intent,
+                                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+                                )
+                                pendingIntent?.let {
+                                    alarmManager.cancel(it)
+                                    it.cancel()
+                                }
+                                reminderList.remove(item)
+                                saveReminders(context, reminderList)
+                            }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red)
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    if (showTimePicker) {
-        AlertDialog(
-            onDismissRequest = { showTimePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    val formattedTime = String.format("%02d:%02d", timePickerState.hour, timePickerState.minute)
-                    val newId = (0..100000).random()
+        // ADD TASK DIALOG
+        if (showAddDialog) {
+            AlertDialog(
+                onDismissRequest = { showAddDialog = false },
+                title = { Text("Add Task") },
+                text = {
+                    Column {
+                        TextField(
+                            value = taskText,
+                            onValueChange = { taskText = it },
+                            label = { Text("Task") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                    // Add to the list
-                    reminderList.add(ReminderItem(newId, reminderText, formattedTime))
+                        // Date picker (simple text input for now)
+                        TextField(
+                            value = selectedDate,
+                            onValueChange = { selectedDate = it },
+                            label = { Text("Date (YYYY-MM-DD)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                    // Schedule the system alarm
-                    val cal = Calendar.getInstance().apply {
-                        set(Calendar.HOUR_OF_DAY, timePickerState.hour)
-                        set(Calendar.MINUTE, timePickerState.minute)
-                        set(Calendar.SECOND, 0)
+                        // Time picker (simple text input for now)
+                        TextField(
+                            value = selectedTime,
+                            onValueChange = { selectedTime = it },
+                            label = { Text("Time (HH:MM)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val newId = (0..100000).random()
+                        val fullTime = "$selectedDate $selectedTime"
+                        reminderList.add(ReminderItem(newId, taskText, fullTime))
+                        saveReminders(context, reminderList)
 
-                    scheduleNotification(context, cal.timeInMillis, reminderText, newId)
+                        // Schedule notification (optional)
+                        val cal = Calendar.getInstance().apply {
+                            val parts = fullTime.split(" ", ":", ignoreCase = true)
+                            set(Calendar.YEAR, selectedDate.split("-")[0].toInt())
+                            set(Calendar.MONTH, selectedDate.split("-")[1].toInt() - 1)
+                            set(Calendar.DAY_OF_MONTH, selectedDate.split("-")[2].toInt())
+                            set(Calendar.HOUR_OF_DAY, selectedTime.split(":")[0].toInt())
+                            set(Calendar.MINUTE, selectedTime.split(":")[1].toInt())
+                            set(Calendar.SECOND, 0)
+                        }
+                        scheduleNotification(context, cal.timeInMillis, taskText, newId)
 
-                    showTimePicker = false
-                    reminderText = ""
-                }) { Text("Add") }
-            },
-            text = { TimePicker(state = timePickerState) }
-        )
+                        // Reset dialog
+                        taskText = ""
+                        showAddDialog = false
+                    }) {
+                        Text("Save")
+                    }
+                }
+            )
+        }
     }
 }
